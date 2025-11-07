@@ -187,8 +187,8 @@ class Car(Entity):
         self.particle_time += time.dt
         if self.particle_time >= self.particle_amount:
             self.particle_time = 0
-            self.particles = Particles(self, self.particle_pivot.world_position - (0, 1, 0))
-            self.particles.destroy(1)
+            #self.particles = Particles(self, self.particle_pivot.world_position - (0, 1, 0))
+            #self.particles.destroy(1)
 
     def hand_brake(self):
         # Hand Braking
@@ -281,6 +281,7 @@ class Car(Entity):
 
 
     def update(self):
+        time.dt = 1/25
         # Exit if esc pressed.
         if held_keys["escape"]:
             quit()

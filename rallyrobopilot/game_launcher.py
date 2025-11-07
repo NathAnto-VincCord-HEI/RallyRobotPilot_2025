@@ -1,12 +1,11 @@
 from rallyrobopilot import Car, Track, SunLight, MultiRaySensor
 from ursina import *
 
-
 def prepare_game_app(track_name = "SimpleTrack"):
     from ursina import window, Ursina
-    
+    application.target_fps = 15
     # Create Window
-    window.vsync = True # Set to false to uncap FPS limit of 60
+    window.vsync = False # Set to false to uncap FPS limit of 60
     app = Ursina(size=(1280,1024))
     print("Asset folder")
     print(application.asset_folder)

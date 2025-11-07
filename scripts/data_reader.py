@@ -11,4 +11,5 @@ if __name__ == "__main__":
 
         print("Read", len(data), "snapshotwas")
         print(data[0].image)
-        print([e.current_controls for e in data])
+        print([e.car_speed for e in data])
+        print([e.raycast_distances for e in data])
