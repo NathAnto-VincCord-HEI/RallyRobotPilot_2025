@@ -13,7 +13,7 @@ class TeacherNetwork:
     Architecture: [input] -> [hidden1] -> [hidden2] -> [output]
     """
     
-    def __init__(self, input_size=17, hidden1_size=32, hidden2_size=16, output_size=4):
+    def __init__(self, input_size=17, hidden1_size=64, hidden2_size=32, output_size=4):
         """
         Args:
             input_size: 15 raycasts + vitesse + angle = 17
@@ -414,6 +414,43 @@ class ImitationLearningInitializer:
         """
         inputs, targets = self.load_human_data(npz_file)
         self.train_supervised(inputs, targets, epochs, learning_rate)
+        return self.network
+        
+    def initialize_from_multiple_files(self, data_files, epochs=50, learning_rate=0.01):
+        """
+        Initialise le réseau à partir de plusieurs fichiers de données
+        
+        Args:
+            data_files: Liste de chemins vers les fichiers .npz
+            epochs: Nombre d'époques d'entraînement
+            learning_rate: Taux d'apprentissage
+        
+        Returns:
+            Le réseau entraîné
+        """
+        print(f"\nChargement de {len(data_files)} fichier(s)...")
+        
+        all_inputs = []
+        all_targets = []
+        
+        for i, data_file in enumerate(data_files, 1):
+            print(f"\n  Fichier {i}/{len(data_files)}: {data_file}")
+            inputs, targets = self.load_human_data(data_file)
+            
+            all_inputs.append(inputs)
+            all_targets.append(targets)
+            
+            print(f"    → {len(inputs)} échantillons chargés")
+        
+        # Concaténer tous les datasets
+        combined_inputs = np.concatenate(all_inputs, axis=0)
+        combined_targets = np.concatenate(all_targets, axis=0)
+        
+        print(f"\n✓ Total combiné: {len(combined_inputs)} échantillons")
+        
+        # Entraîner sur le dataset combiné
+        self.train_supervised(combined_inputs, combined_targets, epochs, learning_rate)
+        
         return self.network
 
 

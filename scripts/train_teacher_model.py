@@ -44,28 +44,37 @@ class HybridTrainingPipeline:
     def phase1_imitation_learning(self):
         """
         Phase 1: Initialisation par apprentissage par imitation
-        Utilise les données de conduite humaine
+        Utilise les données de conduite humaine (supporte plusieurs fichiers)
         """
         print(f"\n{'#'*70}")
         print(f"# PHASE 1: APPRENTISSAGE PAR IMITATION")
         print(f"{'#'*70}\n")
         
-        human_data_file = self.config['human_data_file']
+        human_data_files = self.config['human_data_files']  # Liste de fichiers
         
-        if not Path(human_data_file).exists():
-            print(f"⚠ ATTENTION: Fichier de données non trouvé: {human_data_file}")
+        # Vérifier quels fichiers existent
+        existing_files = []
+        for data_file in human_data_files:
+            if Path(data_file).exists():
+                existing_files.append(data_file)
+                print(f"✓ Fichier trouvé: {data_file}")
+            else:
+                print(f"⚠ Fichier non trouvé: {data_file}")
+        
+        if not existing_files:
+            print(f"\n⚠ ATTENTION: Aucun fichier de données valide trouvé")
             print(f"  → Utilisation d'une initialisation aléatoire à la place")
             
             self.base_network = TeacherNetwork()
             return self.base_network
         
-        print(f"Fichier de données: {human_data_file}")
+        print(f"\n{len(existing_files)} fichier(s) de données disponible(s)")
         
         # Créer le réseau
         self.base_network = TeacherNetwork(
             input_size=17,
-            hidden1_size=self.config.get('hidden1_size', 32),
-            hidden2_size=self.config.get('hidden2_size', 16),
+            hidden1_size=self.config.get('hidden1_size', 64),
+            hidden2_size=self.config.get('hidden2_size', 32),
             output_size=4
         )
         
@@ -74,8 +83,8 @@ class HybridTrainingPipeline:
         initializer = ImitationLearningInitializer(self.base_network)
         
         try:
-            self.base_network = initializer.initialize_from_data(
-                human_data_file,
+            self.base_network = initializer.initialize_from_multiple_files(
+                existing_files,
                 epochs=self.config.get('imitation_epochs', 50),
                 learning_rate=self.config.get('imitation_lr', 0.01)
             )
@@ -320,8 +329,9 @@ def main():
     parser.add_argument(
         '--human-data',
         type=str,
-        default='record_0.npz',
-        help='Fichier de données de conduite humaine'
+        nargs='+',  # Permet de passer plusieurs fichiers
+        default=['record_0.npz'],
+        help='Fichier(s) de données de conduite humaine (ex: record_0.npz record_1.npz)'
     )
     
     parser.add_argument(
@@ -363,7 +373,7 @@ def main():
     # Configuration
     config = {
         'track_name': args.track,
-        'human_data_file': args.human_data,
+        'human_data_files': args.human_data,
         'population_size': args.population,
         'n_generations': args.generations,
         'simulation_time': args.simulation_time,
@@ -398,12 +408,21 @@ def main():
         print(f"   ⚠ Fichier de checkpoints non trouvé: {checkpoint_path}")
         print(f"   Le système utilisera uniquement la distance parcourue")
     
-    print(f"\n2. Données humaines: {config['human_data_file']}")
-    data_path = Path(config['human_data_file'])
-    if data_path.exists():
-        print(f"   ✓ Fichier de données trouvé")
+    print(f"\n2. Données humaines:")
+    data_files = config['human_data_files']
+    valid_files = 0
+    for i, data_file in enumerate(data_files, 1):
+        data_path = Path(data_file)
+        if data_path.exists():
+            print(f"   {i}. ✓ {data_file}")
+            valid_files += 1
+        else:
+            print(f"   {i}. ⚠ {data_file} (non trouvé)")
+
+    if valid_files == 0:
+        print(f"   ⚠ Aucun fichier valide - initialisation aléatoire sera utilisée")
     else:
-        print(f"   ⚠ Fichier non trouvé - initialisation aléatoire sera utilisée")
+        print(f"   → {valid_files} fichier(s) valide(s) sur {len(data_files)}")
     
     print(f"\n3. Connexion au jeu:")
     print(f"   Host: {config['game_host']}")
