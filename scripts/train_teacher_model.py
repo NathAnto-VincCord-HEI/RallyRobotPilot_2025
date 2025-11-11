@@ -170,8 +170,24 @@ class HybridTrainingPipeline:
                 self.genetic_algorithm.fitness_scores = fitness_scores
                 self.genetic_algorithm.generation = generation
                 
-                # Statistiques
-                best_network, best_fitness = self.genetic_algorithm.get_best_individual()
+                # CORRECTION: Mettre à jour l'historique pour les graphiques
+                best_fitness = np.max(fitness_scores)
+                avg_fitness = np.mean(fitness_scores)
+                diversity = self.genetic_algorithm._calculate_diversity()
+                
+                self.genetic_algorithm.best_fitness_history.append(best_fitness)
+                self.genetic_algorithm.avg_fitness_history.append(avg_fitness)
+                self.genetic_algorithm.diversity_history.append(diversity)
+                
+                # Afficher les statistiques
+                print(f"\n📊 Statistiques de la génération {generation + 1}:")
+                print(f"    Meilleur: {best_fitness:.2f}")
+                print(f"    Moyenne: {avg_fitness:.2f}")
+                print(f"    Pire: {np.min(fitness_scores):.2f}")
+                print(f"    Diversité: {diversity:.4f}")
+                
+                # Vérifier si on a un nouveau meilleur modèle
+                best_network, _ = self.genetic_algorithm.get_best_individual()
                 
                 if best_fitness > best_overall_fitness:
                     best_overall_fitness = best_fitness
@@ -205,9 +221,16 @@ class HybridTrainingPipeline:
                 best_overall_network.save(str(interrupt_path))
         
         # Génération des graphiques
-        print("\nGénération des graphiques de progression...")
-        plot_path = self.output_dir / f"evolution_progress_{self.track_name}.png"
-        self.genetic_algorithm.plot_progress(str(plot_path))
+        print("\n" + "="*70)
+        print("Génération des graphiques de progression...")
+        
+        # Vérifier qu'on a bien des données dans l'historique
+        if len(self.genetic_algorithm.best_fitness_history) > 0:
+            plot_path = self.output_dir / f"evolution_progress_{self.track_name}.png"
+            self.genetic_algorithm.plot_progress(str(plot_path))
+            print(f"✓ Graphique sauvegardé: {plot_path}")
+        else:
+            print("⚠ Aucune donnée d'historique disponible pour générer les graphiques")
         
         print(f"\n✓ Phase 2 terminée!")
         print(f"  Meilleure fitness atteinte: {best_overall_fitness:.2f}")

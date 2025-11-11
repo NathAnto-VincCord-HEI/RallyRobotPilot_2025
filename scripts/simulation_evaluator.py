@@ -286,11 +286,11 @@ class SimulationEvaluator:
             float: Score de fitness (plus haut = meilleur)
         """
         # Pondérations des différents critères
-        DISTANCE_WEIGHT = 1.5
-        CHECKPOINT_WEIGHT = 150.0  
-        SPEED_WEIGHT = 2.0
+        DISTANCE_WEIGHT = 2.0
+        CHECKPOINT_WEIGHT = 100.0  
+        SPEED_WEIGHT = 3.0
         SURVIVAL_WEIGHT = 0.1
-        COLLISION_PENALTY = 10.0
+        COLLISION_PENALTY = 100.0
         
         # Calcul du score
         fitness = (
