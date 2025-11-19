@@ -24,17 +24,16 @@ from rallyrobopilot import prepare_game_app
 # ============================================================================
 
 # Track selection
-TRACK_NAME = "NotSoSimpleTrack"  # Options: "SimpleTrack", "NotSoSimpleTrack", "VisualTrack/track_circuit2_metadata.json"
+TRACK_NAME = "SlightlyHarder"  # Options: "SimpleTrack", "NotSoSimpleTrack", "SlightlyHarder", "VisualTrack/track_circuit2_metadata.json"
 
 # Window settings
 WINDOW_WIDTH = 160
 WINDOW_HEIGHT = 224
-TARGET_FPS = 25
-# Note: Autopilot will automatically resize images to 1024x1280 for inference
+TARGET_FPS = 60
 
-# Autopilot settings
+# Autopilot settings (cnn1 might not work !!)
 ENABLE_AUTOPILOT_AT_START = False  # Set to True to start with autopilot active
-AUTOPILOT_MODEL_PATH = "car_cnn_proper_best.pth"  # Path to trained CNN model
+AUTOPILOT_MODEL_PATH = "models/cnn2b.pth"  # Path to trained CNN model
 AUTOPILOT_INFERENCE_HZ = 5  # Inference frequency (Hz). Lower = better FPS, higher = more responsive
 # Recommended: 5 Hz = smooth FPS, 10 Hz = balanced, 15+ Hz = needs good GPU
 

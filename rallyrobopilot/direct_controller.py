@@ -116,46 +116,18 @@ class DirectController(Entity):
             # Try to load autopilot based on model filename
             try:
                 # Check if this is a ProperCNN model
-                if "proper" in self.autopilot_model_path.lower():
-                    from proper_autopilot import ProperNNMsgProcessor
-                    self.autopilot_processor = ProperNNMsgProcessor(
-                        model_path=self.autopilot_model_path,
-                        device='cuda' if torch.cuda.is_available() else 'cpu',
-                        debug=False
-                    )
-                    print("[+] Loaded ProperCNN autopilot")
-                else:
-                    # Try improved autopilot
-                    from improved_autopilot import ImprovedNNMsgProcessor
-                    
-                    # Determine model type from filename
-                    model_type = "improved"  # default
-                    use_raycasts = False
-                    
-                    if "multimodal" in self.autopilot_model_path.lower():
-                        model_type = "multimodal"
-                        use_raycasts = True
-                        print("[+] Detected multimodal model - will use raycast data")
-                    elif "attention" in self.autopilot_model_path.lower():
-                        model_type = "attention"
-                    elif "improved" in self.autopilot_model_path.lower():
-                        model_type = "improved"
-                    
-                    # Create the improved autopilot processor
-                    self.autopilot_processor = ImprovedNNMsgProcessor(
-                        model_path=self.autopilot_model_path,
-                        model_type=model_type,
-                        use_raycasts=use_raycasts,
-                        debug=False
-                    )
-                    print(f"[+] Loaded improved autopilot ({model_type})")
+                from proper_autopilot import ProperNNMsgProcessor
+                self.autopilot_processor = ProperNNMsgProcessor(
+                    model_path=self.autopilot_model_path,
+                    device='cuda' if torch.cuda.is_available() else 'cpu',
+                    debug=True
+                )
+                print("[+] Loaded ProperCNN autopilot")
                 
             except ImportError as e:
                 # Fall back to regular autopilot
                 print(f"[!] Improved/Proper autopilot not found: {e}")
-                print("[!] Using regular autopilot")
-                from autopilot import NNMsgProcessor
-                self.autopilot_processor = NNMsgProcessor(model_path=self.autopilot_model_path)
+                return False
             
             # Show device info
             device = self.autopilot_processor.device

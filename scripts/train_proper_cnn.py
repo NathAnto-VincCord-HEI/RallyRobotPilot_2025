@@ -16,6 +16,7 @@ import numpy as np
 import pickle
 import lzma
 from pathlib import Path
+import re
 import matplotlib
 matplotlib.use('Agg')  # Use non-interactive backend
 import matplotlib.pyplot as plt
@@ -25,8 +26,37 @@ from torch import optim, nn
 from torch.utils.data import DataLoader, Dataset
 from tqdm import tqdm
 from sklearn.model_selection import train_test_split
+from sklearn import metrics
 
 from proper_cnn_model import ProperCNN
+
+
+def get_next_model_id():
+    """Find the next available model ID by scanning existing model files"""
+    # Check both root directory and models folder
+    root = Path("./")
+    models_dir = root / "models"
+    
+    existing_ids = []
+    
+    # Pattern to match cnnXY.pth where X is digits, Y is b or f
+    pattern = re.compile(r'cnn(\d+)[bf]\.pth')
+    
+    # Search in root directory
+    for file in root.glob("cnn*.pth"):
+        match = pattern.match(file.name)
+        if match:
+            existing_ids.append(int(match.group(1)))
+    
+    # Search in models directory if it exists
+    if models_dir.exists():
+        for file in models_dir.glob("cnn*.pth"):
+            match = pattern.match(file.name)
+            if match:
+                existing_ids.append(int(match.group(1)))
+    
+    # Return next ID (or 1 if no models exist)
+    return max(existing_ids) + 1 if existing_ids else 1
 
 
 class CarDataset(Dataset):
@@ -119,9 +149,24 @@ def load_data():
 
 def train_with_early_stopping():
     """Train model with proper regularization"""
+    # Get next model ID and setup paths
+    model_id = get_next_model_id()
+    models_dir = Path("models")
+    models_dir.mkdir(exist_ok=True)
+    
+    best_model_path = models_dir / f"cnn{model_id}b.pth"
+    final_model_path = models_dir / f"cnn{model_id}f.pth"
+    history_plot_path = models_dir / f"cnn{model_id}_history.png"
+    confusion_matrix_path = models_dir / f"cnn{model_id}_conf_matrix.png"
+    
     print("\n" + "="*70)
     print("TRAINING SETUP")
     print("="*70)
+    print(f"\nModel ID: {model_id}")
+    print(f"Best model will be saved to: {best_model_path}")
+    print(f"Final model will be saved to: {final_model_path}")
+    print(f"History plot will be saved to: {history_plot_path}")
+    print(f"Confusion matrix will be saved to: {confusion_matrix_path}")
     
     # Load data
     X, y = load_data()
@@ -146,7 +191,7 @@ def train_with_early_stopping():
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"\nDevice: {device}")
     
-    model = ProperCNN(dropout=0.4)  # Higher dropout to prevent overfitting
+    model = ProperCNN(dropout=0.4)
     model = model.to(device)
     
     params = sum(p.numel() for p in model.parameters())
@@ -166,7 +211,7 @@ def train_with_early_stopping():
     print("TRAINING")
     print("="*70)
     
-    num_epochs = 30
+    num_epochs = 5 # 30
     best_val_loss = float('inf')
     patience = 5
     patience_counter = 0
@@ -175,15 +220,25 @@ def train_with_early_stopping():
         'train_loss': [],
         'val_loss': [],
         'train_acc': [],
-        'val_acc': []
+        'val_acc': [],
     }
     
+    # Storage for confusion matrix data
+    train_all_preds = []
+    train_all_labels = []
+    val_all_preds = []
+    val_all_labels = []
+
     for epoch in range(num_epochs):
         # Training phase
         model.train()
         train_loss = 0.0
         train_correct = 0
         train_total = 0
+        
+        # Reset for this epoch
+        epoch_train_preds = []
+        epoch_train_labels = []
         
         for images, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
             images, labels = images.to(device), labels.to(device)
@@ -205,6 +260,12 @@ def train_with_early_stopping():
             train_correct += (preds == labels).sum().item()
             train_total += labels.numel()
         
+            # Store for confusion matrix (last epoch only)
+            if epoch == num_epochs - 1 or patience_counter >= patience - 1:
+                epoch_train_preds.append(preds.cpu().numpy())
+                epoch_train_labels.append(labels.cpu().numpy())
+
+
         train_loss /= len(train_loader)
         train_acc = train_correct / train_total
         
@@ -214,6 +275,10 @@ def train_with_early_stopping():
         val_correct = 0
         val_total = 0
         
+        # Reset for this epoch
+        epoch_val_preds = []
+        epoch_val_labels = []
+
         with torch.no_grad():
             for images, labels in val_loader:
                 images, labels = images.to(device), labels.to(device)
@@ -225,9 +290,24 @@ def train_with_early_stopping():
                 preds = (torch.sigmoid(outputs) > 0.5).float()
                 val_correct += (preds == labels).sum().item()
                 val_total += labels.numel()
+
+                # Store for confusion matrix (last epoch only)
+                if epoch == num_epochs - 1 or patience_counter >= patience - 1:
+                    epoch_val_preds.append(preds.cpu().numpy())
+                    epoch_val_labels.append(labels.cpu().numpy())
+        
         
         val_loss /= len(val_loader)
         val_acc = val_correct / val_total
+
+        
+        # Store final epoch predictions
+        if epoch == num_epochs - 1 or patience_counter >= patience - 1:
+            train_all_preds = np.concatenate(epoch_train_preds, axis=0)
+            train_all_labels = np.concatenate(epoch_train_labels, axis=0)
+            val_all_preds = np.concatenate(epoch_val_preds, axis=0)
+            val_all_labels = np.concatenate(epoch_val_labels, axis=0)
+        
         
         # Update learning rate
         scheduler.step(val_loss)
@@ -245,7 +325,7 @@ def train_with_early_stopping():
         # Save best model
         if val_loss < best_val_loss:
             best_val_loss = val_loss
-            torch.save(model.state_dict(), 'car_cnn_proper_best.pth')
+            torch.save(model.state_dict(), best_model_path)
             print(f"  ✓ Saved best model (val_loss={val_loss:.4f})")
             patience_counter = 0
         else:
@@ -258,8 +338,10 @@ def train_with_early_stopping():
             print(f"  Best validation loss: {best_val_loss:.4f}")
             break
     
+    
+
     # Save final model
-    torch.save(model.state_dict(), 'car_cnn_proper_final.pth')
+    torch.save(model.state_dict(), final_model_path)
     
     # Plot training history
     plt.figure(figsize=(12, 5))
@@ -283,14 +365,51 @@ def train_with_early_stopping():
     plt.grid(True)
     
     plt.tight_layout()
-    plt.savefig('training_history_proper.png')
-    print(f"\n✓ Training history saved to training_history_proper.png")
+    plt.savefig(history_plot_path)
+    print(f"\n✓ Training history saved to {history_plot_path}")
+
+    # Plot Confusion Matrices for each output class
+    control_names = ['Forward', 'Back', 'Left', 'Right']
+    
+    fig, axes = plt.subplots(2, 4, figsize=(20, 10))
+    fig.suptitle('Confusion Matrices - Train (top) and Val (bottom)', fontsize=16)
+    
+    for i, control_name in enumerate(control_names):
+        # Train confusion matrix
+        train_cm = metrics.confusion_matrix(
+            train_all_labels[:, i],
+            train_all_preds[:, i]
+        )
+        cm_display = metrics.ConfusionMatrixDisplay(
+            confusion_matrix=train_cm,
+            display_labels=['Off', 'On']
+        )
+        cm_display.plot(cmap='Blues')
+        cm_display.plot(ax=axes[0, i], colorbar=False)
+        axes[0, i].set_title(f'Train: {control_name}')
+        
+        # Val confusion matrix
+        val_cm = metrics.confusion_matrix(
+            val_all_labels[:, i],
+            val_all_preds[:, i]
+        )
+        cm_display = metrics.ConfusionMatrixDisplay(
+            confusion_matrix=val_cm,
+            display_labels=['Off', 'On']
+        )
+        cm_display.plot(cmap='Blues')
+        cm_display.plot(ax=axes[1, i], colorbar=False)
+        axes[1, i].set_title(f'Val: {control_name}')
+
+    plt.tight_layout()
+    plt.savefig(confusion_matrix_path)
+    print(f"✓ Confusion matrices saved to {confusion_matrix_path}")
     
     print("\n" + "="*70)
     print("TRAINING COMPLETE!")
     print("="*70)
-    print(f"\nBest model saved as: car_cnn_proper_best.pth")
-    print(f"Final model saved as: car_cnn_proper_final.pth")
+    print(f"\nBest model saved as: {best_model_path}")
+    print(f"Final model saved as: {final_model_path}")
     print(f"\nBest validation loss: {best_val_loss:.4f}")
     print("\nNext step:")
     print("  python scripts/test_proper_model.py")
@@ -298,3 +417,4 @@ def train_with_early_stopping():
 
 if __name__ == "__main__":
     train_with_early_stopping()
+    
