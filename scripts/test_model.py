@@ -1,25 +1,21 @@
-"""
-Quick test script to verify the ProperCNN model works properly
-Tests with different colored images to ensure output variation
-"""
 import torch
 import numpy as np
 from PIL import Image
-from proper_cnn_model import ProperCNN
+from cnn_model import CNNModel
 
 
-def test_model_variation(model_path='car_cnn_proper_best.pth'):
+def test_model_variation(model_path='cnnXY.pth'):
     """Test that model produces varying outputs for different inputs"""
     
     print("="*70)
-    print("TESTING ProperCNN MODEL")
+    print("TESTING CNN MODEL")
     print("="*70)
     
     # Load model
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
     print(f"\nDevice: {device}")
     
-    model = ProperCNN()
+    model = CNNModel()
     model.to(device)
     
     print(f"Loading model from: {model_path}")
@@ -29,7 +25,7 @@ def test_model_variation(model_path='car_cnn_proper_best.pth'):
     except FileNotFoundError:
         print(f"✗ Model file not found: {model_path}")
         print("\nPlease train the model first:")
-        print("  python scripts/train_proper_cnn.py")
+        print("  python scripts/train_cnn.py")
         return
     except Exception as e:
         print(f"✗ Error loading model: {e}")
@@ -134,7 +130,7 @@ def test_model_variation(model_path='car_cnn_proper_best.pth'):
     return overall_std >= 0.01
 
 
-def test_with_random_noise(model_path='car_cnn_proper_best.pth'):
+def test_with_random_noise(model_path='cnnXY.pth'):
     """Test model with random noise patterns"""
     
     print("\n" + "="*70)
@@ -142,7 +138,7 @@ def test_with_random_noise(model_path='car_cnn_proper_best.pth'):
     print("="*70)
     
     device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-    model = ProperCNN()
+    model = CNNModel()
     model.to(device)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.eval()
@@ -170,13 +166,11 @@ def test_with_random_noise(model_path='car_cnn_proper_best.pth'):
 
 
 if __name__ == '__main__':
-    success = test_model_variation()
+    path = 'models/cnn7b.pth'
+    success = test_model_variation(model_path=path)
     
     if success:
-        test_with_random_noise()
+        test_with_random_noise(model_path=path)
         print("\n✓ All tests completed successfully!")
     else:
         print("\n✗ Model testing failed")
-        print("\nNext steps:")
-        print("1. Train the model: python scripts/train_proper_cnn.py")
-        print("2. Run this test again: python scripts/test_proper_model.py")

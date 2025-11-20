@@ -1,30 +1,11 @@
-"""
-Properly-sized CNN for rally robot - Not too simple, not too complex.
-
-This model is sized appropriately for ~10K training samples:
-- Enough capacity to learn complex patterns
-- Not so large that it overfits immediately
-- ~2-3M parameters (sweet spot)
-"""
-
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
 
-class ProperCNN(nn.Module):
-    """
-    Well-balanced CNN architecture.
-    
-    Key design choices:
-    - 5 conv layers with gradual channel increase
-    - Dropout for regularization
-    - BatchNorm for stable training
-    - ~2M parameters (right size for 10K samples)
-    """
-    
+class CNNLargerModel(nn.Module):    
     def __init__(self, in_channels=3, num_classes=4, dropout=0.4):
-        super(ProperCNN, self).__init__()
+        super(CNNLargerModel, self).__init__()
         
         # Conv block 1: 224x160 -> 112x80
         self.conv1 = nn.Conv2d(in_channels, 32, kernel_size=5, padding=2)
@@ -49,11 +30,11 @@ class ProperCNN(nn.Module):
         
         # Flattened: 512 * 7 * 5 = 17,920
         self.dropout1 = nn.Dropout(dropout)
-        self.fc1 = nn.Linear(512 * 7 * 5, 256)
+        self.fc1 = nn.Linear(512 * 7 * 5, 512)
         self.dropout2 = nn.Dropout(dropout)
-        self.fc2 = nn.Linear(256, 64)
+        self.fc2 = nn.Linear(512, 128)
         self.dropout3 = nn.Dropout(dropout)
-        self.fc3 = nn.Linear(64, num_classes)
+        self.fc3 = nn.Linear(128, num_classes)
     
     def forward(self, x):
         # Block 1
@@ -89,13 +70,13 @@ class ProperCNN(nn.Module):
 
 if __name__ == "__main__":
     # Test the model
-    model = ProperCNN()
+    model = CNNModel()
     
     # Count parameters
     total_params = sum(p.numel() for p in model.parameters())
     trainable_params = sum(p.numel() for p in model.parameters() if p.requires_grad)
     
-    print(f"ProperCNN Model:")
+    print(f"CNN Model:")
     print(f"  Total parameters: {total_params:,}")
     print(f"  Trainable parameters: {trainable_params:,}")
     

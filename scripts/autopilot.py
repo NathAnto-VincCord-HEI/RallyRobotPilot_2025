@@ -1,23 +1,19 @@
-"""
-Autopilot using ProperCNN model
-Uses the properly-sized CNN architecture that matches car_cnn_proper_best.pth
-"""
 import torch
 import numpy as np
 from PIL import Image
-from proper_cnn_model import ProperCNN
+from cnn_model import CNNModel
 
 
-class ProperNNMsgProcessor:
-    """Message processor using ProperCNN model"""
+class NNMsgProcessor:
+    """Message processor using CNN model"""
     
-    def __init__(self, model_path='car_cnn_proper_best.pth', device='cpu', debug=False):
+    def __init__(self, model_path='cnnXY.pth', device='cpu', debug=False):
         self.model_path = model_path
         self.device = torch.device(device)
         self.debug = debug
         
         # Initialize model
-        self.model = ProperCNN()
+        self.model = CNNModel(dropout=0.5)
         self.model.to(self.device)
         
         # Load trained weights
@@ -116,7 +112,7 @@ class ProperNNMsgProcessor:
 
 def test_processor():
     """Test the processor with a dummy image"""
-    print("Testing ProperNNMsgProcessor...")
+    print("Testing NNMsgProcessor...")
     
     # Create dummy sensing message
     class DummyMsg:
@@ -124,8 +120,8 @@ def test_processor():
             self.image = Image.new('RGB', (160, 224), color='red')
     
     # Test with CPU
-    processor = ProperNNMsgProcessor(
-        model_path='car_cnn_proper_best.pth',
+    processor = NNMsgProcessor(
+        model_path='cnnXY.pth',
         device='cpu',
         debug=True
     )

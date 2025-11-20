@@ -109,7 +109,7 @@ def analyze_data():
     if len(issues) == 0:
         print("✓ DATA LOOKS GOOD! Ready to train.")
         print("\nNext step:")
-        print("  python scripts/train_improved_cnn.py --model improved --epochs 50")
+        print("  python scripts/train_proper_cnn.py")
     else:
         print("❌ DATA QUALITY ISSUES FOUND:")
         for issue in issues:

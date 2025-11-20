@@ -1,17 +1,3 @@
-"""
-Retrain with proper regularization to prevent overfitting.
-
-Based on your training history, the model overfitted after epoch 10.
-This script includes:
-- Early stopping (stop when validation loss increases)
-- Higher dropout (0.4 instead of 0.3)
-- L2 regularization (weight decay)
-- Learning rate scheduling
-- Save best model based on validation loss
-
-This version loads data WITHOUT importing Ursina!
-"""
-
 import numpy as np
 import pickle
 import lzma
@@ -28,8 +14,9 @@ from tqdm import tqdm
 from sklearn.model_selection import train_test_split
 from sklearn import metrics
 
-from proper_cnn_model import ProperCNN
+from cnn_model import CNNModel
 
+from torch.amp import autocast, GradScaler
 
 def get_next_model_id():
     """Find the next available model ID by scanning existing model files"""
@@ -158,7 +145,9 @@ def train_with_early_stopping():
     final_model_path = models_dir / f"cnn{model_id}f.pth"
     history_plot_path = models_dir / f"cnn{model_id}_history.png"
     confusion_matrix_path = models_dir / f"cnn{model_id}_conf_matrix.png"
-    
+    checkpoint_dir = models_dir / f"cnn{model_id}_checkpoints"
+    checkpoint_dir.mkdir(exist_ok=True)
+
     print("\n" + "="*70)
     print("TRAINING SETUP")
     print("="*70)
@@ -167,8 +156,10 @@ def train_with_early_stopping():
     print(f"Final model will be saved to: {final_model_path}")
     print(f"History plot will be saved to: {history_plot_path}")
     print(f"Confusion matrix will be saved to: {confusion_matrix_path}")
+    print(f"Checkpoints will be saved to: {checkpoint_dir}/")
     
     # Load data
+    print("\n--- Loading data ---")
     X, y = load_data()
     
     # Split data
@@ -184,14 +175,28 @@ def train_with_early_stopping():
     val_dataset = CarDataset(X_val, y_val)
     
     # DataLoaders with appropriate batch size
-    train_loader = DataLoader(train_dataset, batch_size=32, shuffle=True)
-    val_loader = DataLoader(val_dataset, batch_size=32, shuffle=False)
+    train_loader = DataLoader(
+        train_dataset, 
+        batch_size=64,
+        shuffle=True,
+        num_workers=4,  # Parallel data loading
+        pin_memory=True,  # Faster GPU transfer
+        persistent_workers=True  # Keep workers alive between epochs
+    )
+    val_loader = DataLoader(
+        val_dataset,   
+        batch_size=64,
+        shuffle=False,
+        num_workers=4,
+        pin_memory=True,
+        persistent_workers=True
+    )
     
     # Create model
     device = "cuda" if torch.cuda.is_available() else "cpu"
     print(f"\nDevice: {device}")
     
-    model = ProperCNN(dropout=0.4)
+    model = CNNModel(dropout=0.4)  # Higher dropout to prevent overfitting
     model = model.to(device)
     
     params = sum(p.numel() for p in model.parameters())
@@ -205,13 +210,19 @@ def train_with_early_stopping():
     scheduler = optim.lr_scheduler.ReduceLROnPlateau(
         optimizer, mode='min', factor=0.5, patience=3
     )
+    # scheduler = optim.lr_scheduler.CosineAnnealingWarmRestarts(
+    #     optimizer, T_0=10, T_mult=2, eta_min=1e-6
+    # )
+
+    # # Mixed precision scaler (only for CUDA)
+    # scaler = GradScaler() if device == "cuda" else None
     
     # Training loop
     print("\n" + "="*70)
     print("TRAINING")
     print("="*70)
     
-    num_epochs = 5 # 30
+    num_epochs = 30
     best_val_loss = float('inf')
     patience = 5
     patience_counter = 0
@@ -241,9 +252,38 @@ def train_with_early_stopping():
         epoch_train_labels = []
         
         for images, labels in tqdm(train_loader, desc=f"Epoch {epoch+1}/{num_epochs}"):
-            images, labels = images.to(device), labels.to(device)
+            images, labels = images.to(device, non_blocking=True), labels.to(device, non_blocking=True)
             
-            optimizer.zero_grad()
+            optimizer.zero_grad(set_to_none=True)
+
+            # # Mixed precision forward pass (only if CUDA available)
+            # if device == "cuda":
+            #     with autocast(device_type='cuda'):
+            #         outputs = model(images)
+            #         loss = criterion(outputs, labels)
+                
+            #     # Mixed precision backward pass
+            #     scaler.scale(loss).backward()
+            #     scaler.unscale_(optimizer)
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            #     scaler.step(optimizer)
+            #     scaler.update()
+            # else:
+            #     # Regular training for CPU
+            #     outputs = model(images)
+            #     loss = criterion(outputs, labels)
+            #     loss.backward()
+            #     torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
+            #     optimizer.step()
+            
+            # train_loss += loss.item()
+            
+            # # Calculate accuracy
+            # with torch.no_grad():
+            #     preds = (torch.sigmoid(outputs) > 0.5).float()
+            #     train_correct += (preds == labels).sum().item()
+            #     train_total += labels.numel()
+
             outputs = model(images)
             loss = criterion(outputs, labels)
             loss.backward()
@@ -256,9 +296,10 @@ def train_with_early_stopping():
             train_loss += loss.item()
             
             # Calculate accuracy
-            preds = (torch.sigmoid(outputs) > 0.5).float()
-            train_correct += (preds == labels).sum().item()
-            train_total += labels.numel()
+            with torch.no_grad():
+                preds = (torch.sigmoid(outputs) > 0.5).float()
+                train_correct += (preds == labels).sum().item()
+                train_total += labels.numel()
         
             # Store for confusion matrix (last epoch only)
             if epoch == num_epochs - 1 or patience_counter >= patience - 1:
@@ -321,6 +362,24 @@ def train_with_early_stopping():
         print(f"\nEpoch {epoch+1}:")
         print(f"  Train Loss: {train_loss:.4f}, Train Acc: {train_acc:.4f}")
         print(f"  Val Loss:   {val_loss:.4f}, Val Acc:   {val_acc:.4f}")
+        
+        # Save checkpoint after every epoch
+        checkpoint_path = checkpoint_dir / f"epoch_{epoch+1:02d}.pth"
+        checkpoint = {
+            'epoch': epoch + 1,
+            'model_state_dict': model.state_dict(),
+            'optimizer_state_dict': optimizer.state_dict(),
+            'scheduler_state_dict': scheduler.state_dict(),
+            'train_loss': train_loss,
+            'val_loss': val_loss,
+            'train_acc': train_acc,
+            'val_acc': val_acc,
+            'history': history,
+            'best_val_loss': best_val_loss,
+            'patience_counter': patience_counter
+        }
+        torch.save(checkpoint, checkpoint_path)
+        print(f"  ✓ Checkpoint saved: {checkpoint_path.name}")
         
         # Save best model
         if val_loss < best_val_loss:
@@ -405,6 +464,54 @@ def train_with_early_stopping():
     plt.savefig(confusion_matrix_path)
     print(f"✓ Confusion matrices saved to {confusion_matrix_path}")
     
+    # Calculate and display per-class metrics
+    print("\n" + "="*70)
+    print("PER-CLASS PERFORMANCE METRICS (Validation Set)")
+    print("="*70)
+    
+    metrics_path = models_dir / f"cnn{model_id}_metrics.txt"
+    with open(metrics_path, 'w') as f:
+        f.write("="*70 + "\n")
+        f.write("PER-CLASS PERFORMANCE METRICS (Validation Set)\n")
+        f.write("="*70 + "\n\n")
+        
+        header = f"{'Control':<10} {'Precision':<12} {'Recall':<12} {'F1-Score':<12} {'Support':<10}"
+        print(header)
+        print("-"*70)
+        f.write(header + "\n")
+        f.write("-"*70 + "\n")
+        
+        for i, control_name in enumerate(control_names):
+            # Calculate metrics for this class
+            precision = metrics.precision_score(val_all_labels[:, i], val_all_preds[:, i], zero_division=0)
+            recall = metrics.recall_score(val_all_labels[:, i], val_all_preds[:, i], zero_division=0)
+            f1 = metrics.f1_score(val_all_labels[:, i], val_all_preds[:, i], zero_division=0)
+            support = int(np.sum(val_all_labels[:, i]))
+            
+            line = f"{control_name:<10} {precision:<12.4f} {recall:<12.4f} {f1:<12.4f} {support:<10d}"
+            print(line)
+            f.write(line + "\n")
+        
+        print("-"*70)
+        f.write("-"*70 + "\n\n")
+        
+        # Overall accuracy
+        overall_acc = np.mean(val_all_preds == val_all_labels)
+        line = f"\nOverall Accuracy: {overall_acc:.4f}"
+        print(line)
+        f.write(line + "\n")
+        
+        # Class-wise accuracy
+        f.write("\nClass-wise Accuracy:\n")
+        print("\nClass-wise Accuracy:")
+        for i, control_name in enumerate(control_names):
+            class_acc = np.mean(val_all_preds[:, i] == val_all_labels[:, i])
+            line = f"  {control_name:<10}: {class_acc:.4f}"
+            print(line)
+            f.write(line + "\n")
+    
+    print(f"\n✓ Metrics saved to {metrics_path}")
+    
     print("\n" + "="*70)
     print("TRAINING COMPLETE!")
     print("="*70)
@@ -412,9 +519,8 @@ def train_with_early_stopping():
     print(f"Final model saved as: {final_model_path}")
     print(f"\nBest validation loss: {best_val_loss:.4f}")
     print("\nNext step:")
-    print("  python scripts/test_proper_model.py")
+    print("  python scripts/test_model.py")
 
 
 if __name__ == "__main__":
     train_with_early_stopping()
-    

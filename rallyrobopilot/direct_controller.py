@@ -115,20 +115,20 @@ class DirectController(Entity):
             
             # Try to load autopilot based on model filename
             try:
-                # Check if this is a ProperCNN model
-                from proper_autopilot import ProperNNMsgProcessor
-                self.autopilot_processor = ProperNNMsgProcessor(
+                # import CNN model
+                from autopilot import NNMsgProcessor
+                self.autopilot_processor = NNMsgProcessor(
                     model_path=self.autopilot_model_path,
                     device='cuda' if torch.cuda.is_available() else 'cpu',
                     debug=True
                 )
-                print("[+] Loaded ProperCNN autopilot")
+                print("[+] Loaded CNN autopilot")
                 
             except ImportError as e:
                 # Fall back to regular autopilot
-                print(f"[!] Improved/Proper autopilot not found: {e}")
+                print(f"[!] Autopilot not found: {e}")
                 return False
-            
+                
             # Show device info
             device = self.autopilot_processor.device
             print(f"[+] Autopilot model: {self.autopilot_model_path}")
